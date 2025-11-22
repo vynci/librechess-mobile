@@ -1,24 +1,65 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
-
-import { useColorScheme } from '@/hooks/use-color-scheme';
-
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { StyleSheet, Text, TouchableOpacity } from "react-native";
+import { resetChessGame } from "./index";
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <>
+      <StatusBar style="light" />
       <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        <Stack.Screen
+          name="index"
+          options={{
+            title: "LibreChess",
+            headerShown: true,
+            headerStyle: {
+              backgroundColor: "#312e2b",
+            },
+            headerTintColor: "#fff",
+            headerTitleStyle: {
+              fontWeight: "bold",
+            },
+            headerRight: () => (
+              // <GlassView
+              //   style={styles.resetButtonContainer}
+              //   glassEffectStyle="regular"
+              //   isInteractive={true}
+              // >
+              <TouchableOpacity
+                onPress={() => {
+                  if (resetChessGame) {
+                    resetChessGame();
+                  }
+                }}
+                style={styles.resetButton}
+              >
+                <Text style={styles.resetButtonText}>Reset</Text>
+              </TouchableOpacity>
+              // </GlassView>
+            ),
+          }}
+        />
       </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    </>
   );
 }
+
+const styles = StyleSheet.create({
+  resetButtonContainer: {
+    marginRight: 10,
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+  },
+  resetButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  resetButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+});

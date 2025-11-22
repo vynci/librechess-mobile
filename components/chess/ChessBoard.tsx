@@ -1,0 +1,474 @@
+import { Chess, Square } from "chess.js";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Dimensions, StyleSheet, Text, View } from "react-native";
+import { DraggablePiece, DraggablePieceRef } from "./DraggablePiece";
+import { AIFactory, ChessAI } from "./ai/ChessAI";
+import { PromotionDialog } from "./PromotionDialog";
+
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const BOARD_SIZE = SCREEN_WIDTH; // Use full width
+const SQUARE_SIZE = BOARD_SIZE / 8;
+
+const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
+const RANKS = ["8", "7", "6", "5", "4", "3", "2", "1"];
+
+interface ChessBoardProps {
+  orientation?: "white" | "black";
+  /** Enable computer opponent */
+  vsComputer?: boolean;
+  /** Which color the computer plays (defaults to 'black') */
+  computerColor?: "white" | "black";
+  /** AI type to use */
+  aiType?: "random" | "stockfish";
+  /** Callback to expose reset function */
+  onResetReady?: (resetFn: () => void) => void;
+}
+
+export const ChessBoard: React.FC<ChessBoardProps> = ({
+  orientation = "white",
+  vsComputer = false,
+  computerColor = "black",
+  aiType = "random",
+  onResetReady,
+}) => {
+  const [chess] = useState(() => new Chess());
+  const [board, setBoard] = useState(chess.board());
+  const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
+  const [hoverSquare, setHoverSquare] = useState<Square | null>(null);
+  const [legalMoves, setLegalMoves] = useState<Square[]>([]);
+  const [isComputerThinking, setIsComputerThinking] = useState(false);
+  const [showPromotionDialog, setShowPromotionDialog] = useState(false);
+  const [pendingMove, setPendingMove] = useState<{
+    from: Square;
+    to: Square;
+  } | null>(null);
+  const boardRef = useRef<View>(null);
+  const boardPosition = useRef({ x: 0, y: 0 });
+  const draggedPieceSquare = useRef<Square | null>(null);
+  const ai = useRef<ChessAI>(AIFactory.createAI(aiType));
+  const activePieceRef = useRef<DraggablePieceRef | null>(null);
+  const pieceRefs = useRef<Map<string, DraggablePieceRef>>(new Map());
+
+  const updateBoard = useCallback(() => {
+    setBoard(chess.board());
+  }, [chess]);
+
+  const resetGame = useCallback(() => {
+    chess.reset();
+    setBoard(chess.board());
+    setSelectedSquare(null);
+    setHoverSquare(null);
+    setLegalMoves([]);
+    setIsComputerThinking(false);
+    setShowPromotionDialog(false);
+    setPendingMove(null);
+    draggedPieceSquare.current = null;
+    activePieceRef.current = null;
+  }, [chess]);
+
+  // Expose reset function to parent
+  useEffect(() => {
+    if (onResetReady) {
+      onResetReady(resetGame);
+    }
+  }, [onResetReady, resetGame]);
+
+  const handlePromotionSelect = useCallback(
+    (piece: "q" | "r" | "b" | "n") => {
+      if (!pendingMove) return;
+
+      try {
+        const move = chess.move({
+          from: pendingMove.from,
+          to: pendingMove.to,
+          promotion: piece,
+        });
+
+        if (move) {
+          updateBoard();
+        }
+      } catch (error) {
+        console.error("Promotion move error:", error);
+      }
+
+      setShowPromotionDialog(false);
+      setPendingMove(null);
+    },
+    [chess, pendingMove, updateBoard]
+  );
+
+  const makeComputerMove = useCallback(async () => {
+    if (!vsComputer || chess.isGameOver()) {
+      return;
+    }
+
+    const currentTurn = chess.turn();
+    const shouldComputerMove =
+      (computerColor === "white" && currentTurn === "w") ||
+      (computerColor === "black" && currentTurn === "b");
+
+    if (!shouldComputerMove) {
+      return;
+    }
+
+    setIsComputerThinking(true);
+
+    try {
+      const move = await ai.current.getMove(chess);
+      chess.move(move);
+      updateBoard();
+    } catch (error) {
+      console.error("AI move error:", error);
+    } finally {
+      setIsComputerThinking(false);
+    }
+  }, [chess, vsComputer, computerColor, updateBoard]);
+
+  // Trigger computer move after player moves
+  useEffect(() => {
+    if (vsComputer && !chess.isGameOver() && !isComputerThinking) {
+      const currentTurn = chess.turn();
+      const isComputerTurn =
+        (computerColor === "white" && currentTurn === "w") ||
+        (computerColor === "black" && currentTurn === "b");
+
+      if (isComputerTurn) {
+        makeComputerMove();
+      }
+    }
+  }, [
+    board,
+    vsComputer,
+    computerColor,
+    chess,
+    isComputerThinking,
+    makeComputerMove,
+  ]);
+
+  const getSquareFromCoordinates = useCallback(
+    (x: number, y: number): Square | null => {
+      const relativeX = x - boardPosition.current.x;
+      const relativeY = y - boardPosition.current.y;
+
+      if (
+        relativeX < 0 ||
+        relativeY < 0 ||
+        relativeX >= BOARD_SIZE ||
+        relativeY >= BOARD_SIZE
+      ) {
+        return null;
+      }
+
+      const fileIndex = Math.floor(relativeX / SQUARE_SIZE);
+      const rankIndex = Math.floor(relativeY / SQUARE_SIZE);
+
+      if (fileIndex < 0 || fileIndex > 7 || rankIndex < 0 || rankIndex > 7) {
+        return null;
+      }
+
+      // Map visual position to chess notation
+      const file = FILES[fileIndex];
+      const rank = RANKS[rankIndex];
+      const square = `${file}${rank}` as Square;
+
+      return square;
+    },
+    []
+  );
+
+  const handleDragStart = useCallback(
+    (file: number, rank: number, pieceRef: DraggablePieceRef | null) => {
+      // Don't allow moves while computer is thinking
+      if (isComputerThinking) {
+        return;
+      }
+
+      const square = `${FILES[file]}${RANKS[rank]}` as Square;
+      const piece = chess.get(square);
+
+      // In vs computer mode, only allow moving your own color
+      if (vsComputer) {
+        const playerColor = computerColor === "white" ? "b" : "w";
+        if (piece && piece.color !== playerColor) {
+          return;
+        }
+      }
+
+      if (piece && piece.color === chess.turn()) {
+        // Reset the previously active piece if it's different
+        if (activePieceRef.current && activePieceRef.current !== pieceRef) {
+          activePieceRef.current.reset();
+        }
+
+        // Set the new active piece
+        activePieceRef.current = pieceRef;
+
+        draggedPieceSquare.current = square;
+        setSelectedSquare(square);
+        const moves = chess.moves({ square, verbose: true });
+        setLegalMoves(moves.map((m) => m.to));
+      }
+    },
+    [chess, isComputerThinking, vsComputer, computerColor]
+  );
+
+  const handleDragMove = useCallback(
+    (x: number, y: number) => {
+      const square = getSquareFromCoordinates(x, y);
+      setHoverSquare(square);
+    },
+    [getSquareFromCoordinates]
+  );
+
+  const handleDragEnd = useCallback(
+    (x: number, y: number) => {
+      const toSquare = getSquareFromCoordinates(x, y);
+      const fromSquare = draggedPieceSquare.current;
+
+      if (!toSquare || !fromSquare) {
+        setSelectedSquare(null);
+        setHoverSquare(null);
+        setLegalMoves([]);
+        draggedPieceSquare.current = null;
+        return;
+      }
+
+      // Don't try to move if dragged to the same square
+      if (toSquare === fromSquare) {
+        setSelectedSquare(null);
+        setHoverSquare(null);
+        setLegalMoves([]);
+        draggedPieceSquare.current = null;
+        return;
+      }
+
+      // Check if this is a pawn promotion move
+      const piece = chess.get(fromSquare);
+      const isPromotion =
+        piece &&
+        piece.type === "p" &&
+        ((piece.color === "w" && toSquare[1] === "8") ||
+          (piece.color === "b" && toSquare[1] === "1"));
+
+      if (isPromotion) {
+        // Check if the move is legal before showing promotion dialog
+        const moves = chess.moves({ square: fromSquare, verbose: true });
+        const isLegalMove = moves.some((m) => m.to === toSquare);
+
+        if (isLegalMove) {
+          setPendingMove({ from: fromSquare, to: toSquare });
+          setShowPromotionDialog(true);
+          setSelectedSquare(null);
+          setHoverSquare(null);
+          setLegalMoves([]);
+          draggedPieceSquare.current = null;
+          return;
+        }
+      }
+
+      try {
+        const move = chess.move({
+          from: fromSquare,
+          to: toSquare,
+        });
+
+        if (move) {
+          updateBoard();
+        }
+      } catch (error) {
+        // Invalid move - piece will snap back
+      }
+
+      setSelectedSquare(null);
+      setHoverSquare(null);
+      setLegalMoves([]);
+      draggedPieceSquare.current = null;
+    },
+    [chess, updateBoard, getSquareFromCoordinates]
+  );
+
+  const renderSquare = (file: number, rank: number) => {
+    const isLight = (file + rank) % 2 === 0;
+    const square = `${FILES[file]}${RANKS[rank]}` as Square;
+    const piece = board[rank][file];
+    const isSelected = selectedSquare === square;
+    const isHovered = hoverSquare === square;
+    const isLegalMove = legalMoves.includes(square);
+
+    // Calculate absolute position of square center
+    const squareCenterX =
+      boardPosition.current.x + file * SQUARE_SIZE + SQUARE_SIZE / 2;
+    const squareCenterY =
+      boardPosition.current.y + rank * SQUARE_SIZE + SQUARE_SIZE / 2;
+
+    const pieceKey = `${file}-${rank}`;
+
+    return (
+      <View
+        key={pieceKey}
+        style={[
+          styles.square,
+          { width: SQUARE_SIZE, height: SQUARE_SIZE },
+          isLight ? styles.lightSquare : styles.darkSquare,
+          isSelected && styles.selectedSquare,
+          isHovered && styles.selectedSquare,
+        ]}
+      >
+        {piece && (
+          <DraggablePiece
+            ref={(ref) => {
+              if (ref) {
+                pieceRefs.current.set(pieceKey, ref);
+              } else {
+                pieceRefs.current.delete(pieceKey);
+              }
+            }}
+            piece={piece.type}
+            color={piece.color}
+            squareSize={SQUARE_SIZE}
+            squareCenterX={squareCenterX}
+            squareCenterY={squareCenterY}
+            onDragStart={() =>
+              handleDragStart(file, rank, pieceRefs.current.get(pieceKey) || null)
+            }
+            onDragMove={handleDragMove}
+            onDragEnd={handleDragEnd}
+          />
+        )}
+        {isLegalMove && (
+          <View
+            style={[
+              styles.legalMoveIndicator,
+              piece ? styles.captureIndicator : styles.moveIndicator,
+            ]}
+          />
+        )}
+      </View>
+    );
+  };
+
+  const displayRanks = orientation === "white" ? RANKS : [...RANKS].reverse();
+  const displayFiles = orientation === "white" ? FILES : [...FILES].reverse();
+
+  return (
+    <View style={styles.container}>
+      <View
+        ref={boardRef}
+        style={styles.board}
+        onLayout={(event) => {
+          boardRef.current?.measureInWindow((x, y) => {
+            boardPosition.current = { x, y };
+          });
+        }}
+      >
+        {displayRanks.map((rankLabel, rankIndex) => (
+          <View key={rankLabel} style={styles.row}>
+            {displayFiles.map((fileLabel, fileIndex) => {
+              const actualRank =
+                orientation === "white" ? rankIndex : 7 - rankIndex;
+              const actualFile =
+                orientation === "white" ? fileIndex : 7 - fileIndex;
+              return renderSquare(actualFile, actualRank);
+            })}
+          </View>
+        ))}
+      </View>
+      <View style={styles.info}>
+        <Text style={styles.turnText}>
+          Turn: {chess.turn() === "w" ? "White" : "Black"}
+        </Text>
+        {chess.isCheck() && <Text style={styles.checkText}>Check!</Text>}
+        {chess.isCheckmate() && (
+          <Text style={styles.checkmateText}>Checkmate!</Text>
+        )}
+        {chess.isDraw() && <Text style={styles.drawText}>Draw!</Text>}
+      </View>
+      <PromotionDialog
+        visible={showPromotionDialog}
+        color={pendingMove ? chess.get(pendingMove.from)?.color || "w" : "w"}
+        onSelect={handlePromotionSelect}
+      />
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+  },
+  board: {
+    width: BOARD_SIZE,
+    height: BOARD_SIZE,
+  },
+  row: {
+    flexDirection: "row",
+  },
+  square: {
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
+  },
+  lightSquare: {
+    backgroundColor: "#f0d9b5",
+  },
+  darkSquare: {
+    backgroundColor: "#b58863",
+  },
+  selectedSquare: {
+    backgroundColor: "#baca44",
+    borderWidth: 4,
+    borderColor: "#f6f669",
+  },
+  dropTarget: {
+    backgroundColor: "rgba(130, 151, 105, 0.8)",
+    borderWidth: 4,
+    borderColor: "#f6f669",
+    shadowColor: "#f6f669",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  legalMoveIndicator: {
+    position: "absolute",
+    borderRadius: 100,
+  },
+  moveIndicator: {
+    width: SQUARE_SIZE * 0.3,
+    height: SQUARE_SIZE * 0.3,
+    backgroundColor: "rgba(0, 0, 0, 0.2)",
+  },
+  captureIndicator: {
+    width: SQUARE_SIZE * 0.9,
+    height: SQUARE_SIZE * 0.9,
+    borderWidth: 3,
+    borderColor: "rgba(0, 0, 0, 0.3)",
+  },
+  info: {
+    marginTop: 20,
+    alignItems: "center",
+  },
+  turnText: {
+    color: "#FFFF",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 8,
+  },
+  checkText: {
+    fontSize: 16,
+    color: "#ff6b6b",
+    fontWeight: "bold",
+  },
+  checkmateText: {
+    fontSize: 20,
+    color: "#ff0000",
+    fontWeight: "bold",
+  },
+  drawText: {
+    fontSize: 18,
+    color: "#666",
+    fontWeight: "bold",
+  },
+});
