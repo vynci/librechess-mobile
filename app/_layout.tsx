@@ -21,11 +21,6 @@ export default function RootLayout() {
               fontWeight: "bold",
             },
             headerRight: () => (
-              // <GlassView
-              //   style={styles.resetButtonContainer}
-              //   glassEffectStyle="regular"
-              //   isInteractive={true}
-              // >
               <TouchableOpacity
                 onPress={() => {
                   if (resetChessGame) {
@@ -36,7 +31,6 @@ export default function RootLayout() {
               >
                 <Text style={styles.resetButtonText}>Reset</Text>
               </TouchableOpacity>
-              // </GlassView>
             ),
           }}
         />

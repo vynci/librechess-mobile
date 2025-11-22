@@ -13,6 +13,7 @@ export default function Index() {
           vsComputer={true}
           computerColor="black"
           aiType="random"
+          testCheckmate={false}
           onResetReady={(resetFn) => {
             resetChessGame = resetFn;
           }}

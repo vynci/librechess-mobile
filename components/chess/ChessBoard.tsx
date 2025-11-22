@@ -1,8 +1,10 @@
 import { Chess, Square } from "chess.js";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Dimensions, StyleSheet, Text, View } from "react-native";
-import { DraggablePiece, DraggablePieceRef } from "./DraggablePiece";
 import { AIFactory, ChessAI } from "./ai/ChessAI";
+import { CheckBadge } from "./CheckBadge";
+import { DraggablePiece, DraggablePieceRef } from "./DraggablePiece";
+import { GameOverDialog } from "./GameOverDialog";
 import { PromotionDialog } from "./PromotionDialog";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -22,6 +24,8 @@ interface ChessBoardProps {
   aiType?: "random" | "stockfish";
   /** Callback to expose reset function */
   onResetReady?: (resetFn: () => void) => void;
+  /** Test mode - start with a checkmate position */
+  testCheckmate?: boolean;
 }
 
 export const ChessBoard: React.FC<ChessBoardProps> = ({
@@ -30,6 +34,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   computerColor = "black",
   aiType = "random",
   onResetReady,
+  testCheckmate = false,
 }) => {
   const [chess] = useState(() => new Chess());
   const [board, setBoard] = useState(chess.board());
@@ -42,6 +47,12 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     from: Square;
     to: Square;
   } | null>(null);
+  const [showGameOverDialog, setShowGameOverDialog] = useState(false);
+  const [kingInCheckSquare, setKingInCheckSquare] = useState<Square | null>(
+    null
+  );
+  const [attackingSquares, setAttackingSquares] = useState<Square[]>([]);
+  const [checkPathSquares, setCheckPathSquares] = useState<Square[]>([]);
   const boardRef = useRef<View>(null);
   const boardPosition = useRef({ x: 0, y: 0 });
   const draggedPieceSquare = useRef<Square | null>(null);
@@ -51,6 +62,94 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
   const updateBoard = useCallback(() => {
     setBoard(chess.board());
+
+    // Find the king square and attacking pieces if in check
+    if (chess.isCheck() && !chess.isCheckmate()) {
+      const currentTurn = chess.turn();
+      const boardState = chess.board();
+      let kingSquare: Square | null = null;
+
+      // Find the king
+      for (let rank = 0; rank < 8; rank++) {
+        for (let file = 0; file < 8; file++) {
+          const piece = boardState[rank][file];
+          if (piece && piece.type === "k" && piece.color === currentTurn) {
+            kingSquare = `${FILES[file]}${RANKS[rank]}` as Square;
+            break;
+          }
+        }
+        if (kingSquare) break;
+      }
+
+      if (kingSquare) {
+        setKingInCheckSquare(kingSquare);
+
+        // Find pieces that are attacking the king and calculate path
+        const attackers: Square[] = [];
+        const pathSquares: Square[] = [];
+
+        // Temporarily switch turn to check which pieces can attack the king
+        const originalTurn = currentTurn;
+        const fen = chess.fen();
+        const fenParts = fen.split(" ");
+        fenParts[1] = currentTurn === "w" ? "b" : "w"; // Switch turn
+        const tempFen = fenParts.join(" ");
+
+        try {
+          chess.load(tempFen);
+
+          for (let rank = 0; rank < 8; rank++) {
+            for (let file = 0; file < 8; file++) {
+              const square = `${FILES[file]}${RANKS[rank]}` as Square;
+              const piece = boardState[rank][file];
+
+              // Check if this piece is attacking the king
+              if (piece && piece.color !== originalTurn) {
+                const moves = chess.moves({ square, verbose: true });
+                if (moves.some((move) => move.to === kingSquare)) {
+                  attackers.push(square);
+
+                  // Calculate path between attacker and king
+                  const attackerFile = file;
+                  const attackerRank = rank;
+                  const kingFile = FILES.indexOf(kingSquare[0]);
+                  const kingRank = RANKS.indexOf(kingSquare[1]);
+
+                  // Determine direction
+                  const fileDir = Math.sign(kingFile - attackerFile);
+                  const rankDir = Math.sign(kingRank - attackerRank);
+
+                  // Add squares between attacker and king (for sliding pieces)
+                  let currentFile = attackerFile + fileDir;
+                  let currentRank = attackerRank + rankDir;
+
+                  while (currentFile !== kingFile || currentRank !== kingRank) {
+                    const pathSquare =
+                      `${FILES[currentFile]}${RANKS[currentRank]}` as Square;
+                    pathSquares.push(pathSquare);
+                    currentFile += fileDir;
+                    currentRank += rankDir;
+                  }
+                }
+              }
+            }
+          }
+        } finally {
+          // Restore original position
+          chess.load(fen);
+        }
+
+        console.log("King square:", kingSquare);
+        console.log("Attacking squares:", attackers);
+        console.log("Path squares:", pathSquares);
+        setAttackingSquares(attackers);
+        setCheckPathSquares(pathSquares);
+      }
+    } else {
+      setKingInCheckSquare(null);
+      setAttackingSquares([]);
+      setCheckPathSquares([]);
+    }
   }, [chess]);
 
   const resetGame = useCallback(() => {
@@ -62,6 +161,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     setIsComputerThinking(false);
     setShowPromotionDialog(false);
     setPendingMove(null);
+    setShowGameOverDialog(false);
     draggedPieceSquare.current = null;
     activePieceRef.current = null;
   }, [chess]);
@@ -72,6 +172,24 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       onResetReady(resetGame);
     }
   }, [onResetReady, resetGame]);
+
+  // Check for game over
+  useEffect(() => {
+    if (chess.isGameOver()) {
+      setShowGameOverDialog(true);
+    }
+  }, [board, chess]);
+
+  // Set up test checkmate position
+  useEffect(() => {
+    if (testCheckmate) {
+      // Check position with king and queen far apart
+      // White king on e1, Black queen on e7 delivering check vertically
+      // Clear path from e7 to e1
+      chess.load("rnb1kbnr/ppppqppp/8/8/8/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1");
+      updateBoard();
+    }
+  }, [testCheckmate, chess, updateBoard]);
 
   const handlePromotionSelect = useCallback(
     (piece: "q" | "r" | "b" | "n") => {
@@ -294,6 +412,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     const isSelected = selectedSquare === square;
     const isHovered = hoverSquare === square;
     const isLegalMove = legalMoves.includes(square);
+    const isKingInCheck = kingInCheckSquare === square;
+    const isAttackingSquare = attackingSquares.includes(square);
+    const isCheckPath = checkPathSquares.includes(square);
 
     // Calculate absolute position of square center
     const squareCenterX =
@@ -310,8 +431,11 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           styles.square,
           { width: SQUARE_SIZE, height: SQUARE_SIZE },
           isLight ? styles.lightSquare : styles.darkSquare,
+          isCheckPath && styles.checkPathSquare,
           isSelected && styles.selectedSquare,
           isHovered && styles.selectedSquare,
+          isAttackingSquare && styles.attackingSquare,
+          isKingInCheck && styles.kingInCheckSquare,
         ]}
       >
         {piece && (
@@ -329,7 +453,11 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             squareCenterX={squareCenterX}
             squareCenterY={squareCenterY}
             onDragStart={() =>
-              handleDragStart(file, rank, pieceRefs.current.get(pieceKey) || null)
+              handleDragStart(
+                file,
+                rank,
+                pieceRefs.current.get(pieceKey) || null
+              )
             }
             onDragMove={handleDragMove}
             onDragEnd={handleDragEnd}
@@ -377,16 +505,26 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         <Text style={styles.turnText}>
           Turn: {chess.turn() === "w" ? "White" : "Black"}
         </Text>
-        {chess.isCheck() && <Text style={styles.checkText}>Check!</Text>}
-        {chess.isCheckmate() && (
-          <Text style={styles.checkmateText}>Checkmate!</Text>
-        )}
-        {chess.isDraw() && <Text style={styles.drawText}>Draw!</Text>}
+        <View style={styles.badgeContainer}>
+          <CheckBadge visible={chess.isCheck() && !chess.isCheckmate()} />
+        </View>
       </View>
       <PromotionDialog
         visible={showPromotionDialog}
         color={pendingMove ? chess.get(pendingMove.from)?.color || "w" : "w"}
         onSelect={handlePromotionSelect}
+      />
+      <GameOverDialog
+        visible={showGameOverDialog}
+        winner={
+          chess.isCheckmate()
+            ? chess.turn() === "w"
+              ? "black"
+              : "white"
+            : null
+        }
+        isDraw={chess.isDraw()}
+        onPlayAgain={resetGame}
       />
     </View>
   );
@@ -411,15 +549,37 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   lightSquare: {
-    backgroundColor: "#f0d9b5",
+    backgroundColor: "#E8E7D3",
   },
   darkSquare: {
-    backgroundColor: "#b58863",
+    backgroundColor: "#557396",
   },
   selectedSquare: {
     backgroundColor: "#baca44",
     borderWidth: 4,
     borderColor: "#f6f669",
+  },
+  kingInCheckSquare: {
+    backgroundColor: "#ff4444",
+    borderWidth: 4,
+    borderColor: "#ff0000",
+    shadowColor: "#ff0000",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 8,
+  },
+  attackingSquare: {
+    backgroundColor: "#ffaa44",
+    borderWidth: 3,
+    borderColor: "#ff8800",
+    shadowColor: "#ff8800",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 6,
+  },
+  checkPathSquare: {
+    borderWidth: 3,
+    borderColor: "rgba(255, 136, 0, 0.6)",
   },
   dropTarget: {
     backgroundColor: "rgba(130, 151, 105, 0.8)",
@@ -450,25 +610,20 @@ const styles = StyleSheet.create({
     marginTop: 20,
     alignItems: "center",
   },
+  badgeContainer: {
+    height: 48,
+    marginTop: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   turnText: {
     color: "#FFFF",
     fontSize: 18,
     fontWeight: "bold",
-    marginBottom: 8,
   },
   checkText: {
     fontSize: 16,
     color: "#ff6b6b",
-    fontWeight: "bold",
-  },
-  checkmateText: {
-    fontSize: 20,
-    color: "#ff0000",
-    fontWeight: "bold",
-  },
-  drawText: {
-    fontSize: 18,
-    color: "#666",
     fontWeight: "bold",
   },
 });
