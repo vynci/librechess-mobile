@@ -1,6 +1,6 @@
+import { ChessBoard } from "@/components/chess/ChessBoard";
 import { StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { ChessBoard } from "@/components/chess/ChessBoard";
 
 // Global reset function that can be called from the header
 export let resetChessGame: (() => void) | null = null;
@@ -13,7 +13,7 @@ export default function Index() {
           vsComputer={true}
           computerColor="black"
           aiType="random"
-          testCheckmate={false}
+          testCheckmate={true}
           onResetReady={(resetFn) => {
             resetChessGame = resetFn;
           }}
