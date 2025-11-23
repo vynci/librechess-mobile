@@ -1,5 +1,5 @@
 import BottomSheet, { BottomSheetScrollView } from "@gorhom/bottom-sheet";
-import React, { forwardRef, useCallback, useMemo } from "react";
+import React, { forwardRef, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 interface MoveHistoryEntry {
@@ -29,12 +29,6 @@ const MoveHistory = forwardRef<BottomSheet, MoveHistoryProps>(
       }
       return history;
     }, [moves]);
-
-    const handleHeaderPress = useCallback(() => {
-      if (ref && "current" in ref && ref.current) {
-        ref.current.snapToIndex(1); // Expand to 50% (index 1)
-      }
-    }, [ref]);
 
     return (
       <BottomSheet

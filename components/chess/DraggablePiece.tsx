@@ -1,12 +1,11 @@
 import * as Haptics from "expo-haptics";
-import React, { useImperativeHandle, forwardRef } from "react";
+import React, { forwardRef, useImperativeHandle } from "react";
 import { StyleSheet } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
-  SharedValue,
 } from "react-native-reanimated";
 import { ChessPieceSVG } from "./ChessPieceSVG";
 
@@ -25,7 +24,10 @@ export interface DraggablePieceRef {
   reset: () => void;
 }
 
-export const DraggablePiece = forwardRef<DraggablePieceRef, DraggablePieceProps>(
+export const DraggablePiece = forwardRef<
+  DraggablePieceRef,
+  DraggablePieceProps
+>(
   (
     {
       piece,
@@ -59,80 +61,76 @@ export const DraggablePiece = forwardRef<DraggablePieceRef, DraggablePieceProps>
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     };
 
-  const gesture = Gesture.Pan()
-    .minDistance(5)
-    .onBegin(() => {
-      'worklet';
-      // Provide immediate visual feedback on touch
-      scale.value = 1.2;
-      runOnJS(haptic)();
-      if (onDragStart) {
-        runOnJS(onDragStart)();
-      }
-    })
-    .onStart(() => {
-      'worklet';
-      console.log('DraggablePiece: onStart, isActive was:', isActive.value);
-      // Now the drag has truly started (moved 5+ pixels)
-      isActive.value = true;
-      scale.value = 1.5;
-    })
-    .onUpdate((event) => {
-      'worklet';
-      console.log('DraggablePiece: onUpdate, translation:', event.translationX, event.translationY);
-      translateX.value = event.translationX;
-      translateY.value = event.translationY;
+    const gesture = Gesture.Pan()
+      .minDistance(5)
+      .onBegin(() => {
+        "worklet";
+        // Provide immediate visual feedback on touch
+        scale.value = 1.2;
+        runOnJS(haptic)();
+        if (onDragStart) {
+          runOnJS(onDragStart)();
+        }
+      })
+      .onStart(() => {
+        "worklet";
 
-      if (onDragMove) {
-        // Calculate current absolute position
-        const currentX = squareCenterX + event.translationX;
-        const currentY = squareCenterY + event.translationY;
-        runOnJS(onDragMove)(currentX, currentY);
-      }
-    })
-    .onEnd((event) => {
-      'worklet';
-      runOnJS(haptic)();
+        // Now the drag has truly started (moved 5+ pixels)
+        isActive.value = true;
+        scale.value = 1.5;
+      })
+      .onUpdate((event) => {
+        "worklet";
 
-      if (onDragEnd) {
-        // Calculate final absolute position
-        const finalX = squareCenterX + event.translationX;
-        const finalY = squareCenterY + event.translationY;
-        runOnJS(onDragEnd)(finalX, finalY);
-      }
+        translateX.value = event.translationX;
+        translateY.value = event.translationY;
 
-      // Reset visual state
-      translateX.value = 0;
-      translateY.value = 0;
-      scale.value = 1;
-      isActive.value = false;
-    })
-    .onFinalize(() => {
-      'worklet';
-      // Ensure reset even if gesture is cancelled
-      translateX.value = 0;
-      translateY.value = 0;
-      scale.value = 1;
-      isActive.value = false;
-    });
+        if (onDragMove) {
+          // Calculate current absolute position
+          const currentX = squareCenterX + event.translationX;
+          const currentY = squareCenterY + event.translationY;
+          runOnJS(onDragMove)(currentX, currentY);
+        }
+      })
+      .onEnd((event) => {
+        "worklet";
+        runOnJS(haptic)();
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { scale: scale.value },
-    ],
-    zIndex: isActive.value ? 1000 : 0,
-  }));
+        if (onDragEnd) {
+          // Calculate final absolute position
+          const finalX = squareCenterX + event.translationX;
+          const finalY = squareCenterY + event.translationY;
+          runOnJS(onDragEnd)(finalX, finalY);
+        }
+
+        // Reset visual state
+        translateX.value = 0;
+        translateY.value = 0;
+        scale.value = 1;
+        isActive.value = false;
+      })
+      .onFinalize(() => {
+        "worklet";
+        // Ensure reset even if gesture is cancelled
+        translateX.value = 0;
+        translateY.value = 0;
+        scale.value = 1;
+        isActive.value = false;
+      });
+
+    const animatedStyle = useAnimatedStyle(() => ({
+      transform: [
+        { translateX: translateX.value },
+        { translateY: translateY.value },
+        { scale: scale.value },
+      ],
+      zIndex: isActive.value ? 1000 : 0,
+    }));
 
     return (
       <GestureDetector gesture={gesture}>
         <Animated.View style={[styles.container, animatedStyle]}>
-          <ChessPieceSVG
-            type={piece}
-            color={color}
-            size={squareSize * 0.85}
-          />
+          <ChessPieceSVG type={piece} color={color} size={squareSize * 0.85} />
         </Animated.View>
       </GestureDetector>
     );

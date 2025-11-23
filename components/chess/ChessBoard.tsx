@@ -171,9 +171,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           chess.load(fen);
         }
 
-        console.log("King square:", kingSquare);
-        console.log("Attacking squares:", attackers);
-        console.log("Path squares:", pathSquares);
         setAttackingSquares(attackers);
         setCheckPathSquares(pathSquares);
       }
@@ -335,7 +332,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       if (isComputerThinking) {
         return;
       }
-      console.log("drag start!");
+
       const square = `${FILES[file]}${RANKS[rank]}` as Square;
       const piece = chess.get(square);
 
@@ -367,7 +364,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
   const handleDragMove = useCallback(
     (x: number, y: number) => {
-      console.log("drag move!");
       const square = getSquareFromCoordinates(x, y);
       setHoverSquare(square);
     },
