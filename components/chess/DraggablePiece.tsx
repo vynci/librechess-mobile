@@ -60,17 +60,26 @@ export const DraggablePiece = forwardRef<DraggablePieceRef, DraggablePieceProps>
     };
 
   const gesture = Gesture.Pan()
+    .minDistance(5)
     .onBegin(() => {
       'worklet';
-      isActive.value = true;
-      scale.value = 1.5;
+      // Provide immediate visual feedback on touch
+      scale.value = 1.2;
       runOnJS(haptic)();
       if (onDragStart) {
         runOnJS(onDragStart)();
       }
     })
+    .onStart(() => {
+      'worklet';
+      console.log('DraggablePiece: onStart, isActive was:', isActive.value);
+      // Now the drag has truly started (moved 5+ pixels)
+      isActive.value = true;
+      scale.value = 1.5;
+    })
     .onUpdate((event) => {
       'worklet';
+      console.log('DraggablePiece: onUpdate, translation:', event.translationX, event.translationY);
       translateX.value = event.translationX;
       translateY.value = event.translationY;
 

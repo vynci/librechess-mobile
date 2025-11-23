@@ -320,7 +320,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       if (isComputerThinking) {
         return;
       }
-
+      console.log("drag start!");
       const square = `${FILES[file]}${RANKS[rank]}` as Square;
       const piece = chess.get(square);
 
@@ -352,6 +352,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
   const handleDragMove = useCallback(
     (x: number, y: number) => {
+      console.log("drag move!");
       const square = getSquareFromCoordinates(x, y);
       setHoverSquare(square);
     },
@@ -421,6 +422,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       setHoverSquare(null);
       setLegalMoves([]);
       draggedPieceSquare.current = null;
+      activePieceRef.current = null;
     },
     [chess, updateBoard, getSquareFromCoordinates]
   );
@@ -534,62 +536,62 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
   return (
     <View style={styles.container}>
-        <View
-          ref={boardRef}
-          style={styles.board}
-          onLayout={(event) => {
-            boardRef.current?.measureInWindow((x, y) => {
-              boardPosition.current = { x, y };
-            });
-          }}
-        >
-          {displayRanks.map((rankLabel, rankIndex) => (
-            <View key={rankLabel} style={styles.row}>
-              {displayFiles.map((fileLabel, fileIndex) => {
-                const actualRank =
-                  orientation === "white" ? rankIndex : 7 - rankIndex;
-                const actualFile =
-                  orientation === "white" ? fileIndex : 7 - fileIndex;
-                return renderSquare(actualFile, actualRank);
-              })}
-            </View>
-          ))}
-        </View>
-        <View style={styles.info}>
-          <View style={styles.infoRow}>
-            <Text style={styles.turnText}>
-              Turn: {chess.turn() === "w" ? "White" : "Black"}
+      <View
+        ref={boardRef}
+        style={styles.board}
+        onLayout={(event) => {
+          boardRef.current?.measureInWindow((x, y) => {
+            boardPosition.current = { x, y };
+          });
+        }}
+      >
+        {displayRanks.map((rankLabel, rankIndex) => (
+          <View key={rankLabel} style={styles.row}>
+            {displayFiles.map((fileLabel, fileIndex) => {
+              const actualRank =
+                orientation === "white" ? rankIndex : 7 - rankIndex;
+              const actualFile =
+                orientation === "white" ? fileIndex : 7 - fileIndex;
+              return renderSquare(actualFile, actualRank);
+            })}
+          </View>
+        ))}
+      </View>
+      <View style={styles.info}>
+        <View style={styles.infoRow}>
+          <Text style={styles.turnText}>
+            Turn: {chess.turn() === "w" ? "White" : "Black"}
+          </Text>
+          <Pressable
+            style={styles.historyButton}
+            onPress={handleOpenMoveHistory}
+          >
+            <Text style={styles.historyButtonText}>
+              Move History ({moveHistory.length})
             </Text>
-            <Pressable
-              style={styles.historyButton}
-              onPress={handleOpenMoveHistory}
-            >
-              <Text style={styles.historyButtonText}>
-                Move History ({moveHistory.length})
-              </Text>
-            </Pressable>
-          </View>
-          <View style={styles.badgeContainer}>
-            <CheckBadge visible={chess.isCheck() && !chess.isCheckmate()} />
-          </View>
+          </Pressable>
         </View>
-        <PromotionDialog
-          visible={showPromotionDialog}
-          color={pendingMove ? chess.get(pendingMove.from)?.color || "w" : "w"}
-          onSelect={handlePromotionSelect}
-        />
-        <GameOverDialog
-          visible={showGameOverDialog}
-          winner={
-            chess.isCheckmate()
-              ? chess.turn() === "w"
-                ? "black"
-                : "white"
-              : null
-          }
-          isDraw={chess.isDraw()}
-          onPlayAgain={resetGame}
-        />
+        <View style={styles.badgeContainer}>
+          <CheckBadge visible={chess.isCheck() && !chess.isCheckmate()} />
+        </View>
+      </View>
+      <PromotionDialog
+        visible={showPromotionDialog}
+        color={pendingMove ? chess.get(pendingMove.from)?.color || "w" : "w"}
+        onSelect={handlePromotionSelect}
+      />
+      <GameOverDialog
+        visible={showGameOverDialog}
+        winner={
+          chess.isCheckmate()
+            ? chess.turn() === "w"
+              ? "black"
+              : "white"
+            : null
+        }
+        isDraw={chess.isDraw()}
+        onPlayAgain={resetGame}
+      />
     </View>
   );
 };
