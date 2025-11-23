@@ -151,24 +151,48 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   const fileDir = Math.sign(kingFile - attackerFile);
                   const rankDir = Math.sign(kingRank - attackerRank);
 
-                  // Add squares between attacker and king (for sliding pieces)
-                  let currentFile = attackerFile + fileDir;
-                  let currentRank = attackerRank + rankDir;
+                  // Only calculate path for sliding pieces (not knights or pawns)
+                  // Knights and pawns don't have a linear path to the king
+                  const isLinearAttack =
+                    (fileDir === 0 || rankDir === 0 || Math.abs(fileDir) === Math.abs(rankDir));
 
-                  while (currentFile !== kingFile || currentRank !== kingRank) {
-                    const pathSquare =
-                      `${FILES[currentFile]}${RANKS[currentRank]}` as Square;
-                    pathSquares.push(pathSquare);
-                    currentFile += fileDir;
-                    currentRank += rankDir;
+                  if (isLinearAttack && piece.type !== 'n' && piece.type !== 'p') {
+                    // Add squares between attacker and king (for sliding pieces)
+                    let currentFile = attackerFile + fileDir;
+                    let currentRank = attackerRank + rankDir;
+
+                    // Safety check: prevent infinite loops
+                    let iterations = 0;
+                    const maxIterations = 8; // Max distance on chess board
+
+                    while (
+                      (currentFile !== kingFile || currentRank !== kingRank) &&
+                      iterations < maxIterations
+                    ) {
+                      const pathSquare =
+                        `${FILES[currentFile]}${RANKS[currentRank]}` as Square;
+                      pathSquares.push(pathSquare);
+                      currentFile += fileDir;
+                      currentRank += rankDir;
+                      iterations++;
+                    }
                   }
                 }
               }
             }
           }
+        } catch (error) {
+          console.error("Error during check visualization:", error);
+          // Continue without crashing - check visualization is not critical
         } finally {
-          // Restore original position
-          chess.load(fen);
+          // Restore original position - wrap in try-catch for safety
+          try {
+            chess.load(fen);
+          } catch (error) {
+            console.error("Failed to restore chess position:", error);
+            // This is critical - reset the game to prevent corrupt state
+            chess.reset();
+          }
         }
 
         setAttackingSquares(attackers);
@@ -297,6 +321,12 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
   const getSquareFromCoordinates = useCallback(
     (x: number, y: number): Square | null => {
+      // Validate input coordinates are valid numbers
+      if (!isFinite(x) || !isFinite(y)) {
+        console.warn(`Invalid coordinates: x=${x}, y=${y}`);
+        return null;
+      }
+
       const relativeX = x - boardPosition.current.x;
       const relativeY = y - boardPosition.current.y;
 
@@ -439,9 +469,15 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   );
 
   const renderSquare = (file: number, rank: number) => {
+    // Validate bounds to prevent array access errors
+    if (file < 0 || file > 7 || rank < 0 || rank > 7) {
+      console.error(`Invalid square coordinates: file=${file}, rank=${rank}`);
+      return null;
+    }
+
     const isLight = (file + rank) % 2 === 0;
     const square = `${FILES[file]}${RANKS[rank]}` as Square;
-    const piece = board[rank][file];
+    const piece = board[rank]?.[file];
     const isSelected = selectedSquare === square;
     const isHovered = hoverSquare === square;
     const isLegalMove = legalMoves.includes(square);

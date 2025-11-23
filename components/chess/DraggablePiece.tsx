@@ -58,7 +58,12 @@ export const DraggablePiece = forwardRef<
     }));
 
     const haptic = () => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      try {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      } catch (error) {
+        // Silently fail if haptics are not supported or permission denied
+        // This prevents crashes on devices without haptic capabilities
+      }
     };
 
     const gesture = Gesture.Pan()
