@@ -454,7 +454,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     const isCheckPath = checkPathSquares.includes(square);
     const isLastMoveFrom = lastMoveFrom === square;
     const isLastMoveTo = lastMoveTo === square;
-    const isLastMoveSquare = isLastMoveFrom || isLastMoveTo;
 
     // Calculate absolute position of square center
     const squareCenterX =
@@ -476,7 +475,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           styles.square,
           { width: SQUARE_SIZE, height: SQUARE_SIZE },
           isLight ? styles.lightSquare : styles.darkSquare,
-          isLastMoveSquare && styles.lastMoveSquare,
+          isLastMoveFrom && styles.lastMoveFromSquare,
+          isLastMoveTo && styles.lastMoveToSquare,
           isCheckPath && styles.checkPathSquare,
           isSelected && styles.selectedSquare,
           isHovered && styles.selectedSquare,
@@ -685,8 +685,11 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: "#e77e04",
   },
-  lastMoveSquare: {
+  lastMoveFromSquare: {
     backgroundColor: "#cdd26a",
+  },
+  lastMoveToSquare: {
+    backgroundColor: "#a8ad52",
   },
   dropTarget: {
     backgroundColor: "rgba(130, 151, 105, 0.8)",
