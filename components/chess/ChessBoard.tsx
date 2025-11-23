@@ -68,6 +68,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const [lastMoveTo, setLastMoveTo] = useState<Square | null>(null);
   const boardRef = useRef<View>(null);
   const boardPosition = useRef({ x: 0, y: 0 });
+  const boardPositionReady = useRef(false);
   const draggedPieceSquare = useRef<Square | null>(null);
   const ai = useRef<ChessAI>(AIFactory.createAI(aiType));
   const activePieceRef = useRef<DraggablePieceRef | null>(null);
@@ -75,9 +76,27 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const bottomSheetRef = useRef<BottomSheet>(null);
 
   const updateBoard = useCallback(() => {
-    setBoard(chess.board());
+    const newBoard = chess.board();
+    setBoard(newBoard);
     const history = chess.history();
     setMoveHistory(history);
+
+    // Clean up refs for pieces that no longer exist (captured pieces)
+    const currentPieceKeys = new Set<string>();
+    for (let rank = 0; rank < 8; rank++) {
+      for (let file = 0; file < 8; file++) {
+        if (newBoard[rank][file]) {
+          currentPieceKeys.add(`${file}-${rank}`);
+        }
+      }
+    }
+
+    // Remove refs for pieces that are no longer on the board
+    for (const key of pieceRefs.current.keys()) {
+      if (!currentPieceKeys.has(key)) {
+        pieceRefs.current.delete(key);
+      }
+    }
 
     // Notify parent component of move history changes
     if (onMoveHistoryChange) {
@@ -220,6 +239,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     setLastMoveTo(null);
     draggedPieceSquare.current = null;
     activePieceRef.current = null;
+
+    // Clear all piece refs to prevent memory leaks
+    pieceRefs.current.clear();
   }, [chess]);
 
   // Expose reset function to parent
@@ -321,6 +343,11 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
   const getSquareFromCoordinates = useCallback(
     (x: number, y: number): Square | null => {
+      // Wait for board position to be measured before calculating squares
+      if (!boardPositionReady.current) {
+        return null;
+      }
+
       // Validate input coordinates are valid numbers
       if (!isFinite(x) || !isFinite(y)) {
         console.warn(`Invalid coordinates: x=${x}, y=${y}`);
@@ -593,6 +620,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         onLayout={(event) => {
           boardRef.current?.measureInWindow((x, y) => {
             boardPosition.current = { x, y };
+            boardPositionReady.current = true;
           });
         }}
       >

@@ -47,6 +47,16 @@ export const DraggablePiece = forwardRef<
     const scale = useSharedValue(1);
     const isActive = useSharedValue(false);
 
+    // Track center position as shared values to handle updates during drag
+    const centerX = useSharedValue(squareCenterX);
+    const centerY = useSharedValue(squareCenterY);
+
+    // Update center position when props change (e.g., piece moves to new square)
+    React.useEffect(() => {
+      centerX.value = squareCenterX;
+      centerY.value = squareCenterY;
+    }, [squareCenterX, squareCenterY, centerX, centerY]);
+
     // Expose reset function to parent
     useImperativeHandle(ref, () => ({
       reset: () => {
@@ -91,9 +101,9 @@ export const DraggablePiece = forwardRef<
         translateY.value = event.translationY;
 
         if (onDragMove) {
-          // Calculate current absolute position
-          const currentX = squareCenterX + event.translationX;
-          const currentY = squareCenterY + event.translationY;
+          // Calculate current absolute position using shared values
+          const currentX = centerX.value + event.translationX;
+          const currentY = centerY.value + event.translationY;
           runOnJS(onDragMove)(currentX, currentY);
         }
       })
@@ -102,9 +112,9 @@ export const DraggablePiece = forwardRef<
         runOnJS(haptic)();
 
         if (onDragEnd) {
-          // Calculate final absolute position
-          const finalX = squareCenterX + event.translationX;
-          const finalY = squareCenterY + event.translationY;
+          // Calculate final absolute position using shared values
+          const finalX = centerX.value + event.translationX;
+          const finalY = centerY.value + event.translationY;
           runOnJS(onDragEnd)(finalX, finalY);
         }
 
