@@ -1,6 +1,7 @@
+import BottomSheet from "@gorhom/bottom-sheet";
 import { Chess, Square } from "chess.js";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Dimensions, StyleSheet, Text, View } from "react-native";
+import { Dimensions, Pressable, StyleSheet, Text, View } from "react-native";
 import { AIFactory, ChessAI } from "./ai/ChessAI";
 import { CheckBadge } from "./CheckBadge";
 import { DraggablePiece, DraggablePieceRef } from "./DraggablePiece";
@@ -26,6 +27,12 @@ interface ChessBoardProps {
   onResetReady?: (resetFn: () => void) => void;
   /** Test mode - start with a checkmate position */
   testCheckmate?: boolean;
+  /** Show file and rank coordinates on the board */
+  showCoordinates?: boolean;
+  /** Bottom sheet ref for move history */
+  bottomSheetRef?: React.RefObject<BottomSheet | null>;
+  /** Callback when move history changes */
+  onMoveHistoryChange?: (moves: string[]) => void;
 }
 
 export const ChessBoard: React.FC<ChessBoardProps> = ({
@@ -35,6 +42,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   aiType = "random",
   onResetReady,
   testCheckmate = false,
+  showCoordinates = true,
+  bottomSheetRef: externalBottomSheetRef,
+  onMoveHistoryChange,
 }) => {
   const [chess] = useState(() => new Chess());
   const [board, setBoard] = useState(chess.board());
@@ -53,15 +63,24 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   );
   const [attackingSquares, setAttackingSquares] = useState<Square[]>([]);
   const [checkPathSquares, setCheckPathSquares] = useState<Square[]>([]);
+  const [moveHistory, setMoveHistory] = useState<string[]>([]);
   const boardRef = useRef<View>(null);
   const boardPosition = useRef({ x: 0, y: 0 });
   const draggedPieceSquare = useRef<Square | null>(null);
   const ai = useRef<ChessAI>(AIFactory.createAI(aiType));
   const activePieceRef = useRef<DraggablePieceRef | null>(null);
   const pieceRefs = useRef<Map<string, DraggablePieceRef>>(new Map());
+  const bottomSheetRef = useRef<BottomSheet>(null);
 
   const updateBoard = useCallback(() => {
     setBoard(chess.board());
+    const history = chess.history();
+    setMoveHistory(history);
+
+    // Notify parent component of move history changes
+    if (onMoveHistoryChange) {
+      onMoveHistoryChange(history);
+    }
 
     // Find the king square and attacking pieces if in check
     if (chess.isCheck() && !chess.isCheckmate()) {
@@ -150,7 +169,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       setAttackingSquares([]);
       setCheckPathSquares([]);
     }
-  }, [chess]);
+  }, [chess, onMoveHistoryChange]);
 
   const resetGame = useCallback(() => {
     chess.reset();
@@ -162,6 +181,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     setShowPromotionDialog(false);
     setPendingMove(null);
     setShowGameOverDialog(false);
+    setMoveHistory([]);
     draggedPieceSquare.current = null;
     activePieceRef.current = null;
   }, [chess]);
@@ -424,6 +444,11 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
     const pieceKey = `${file}-${rank}`;
 
+    // Show file label on bottom rank
+    const showFileLabel = orientation === "white" ? rank === 7 : rank === 0;
+    // Show rank label on leftmost file
+    const showRankLabel = orientation === "white" ? file === 0 : file === 7;
+
     return (
       <View
         key={pieceKey}
@@ -471,61 +496,100 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             ]}
           />
         )}
+        {/* File label */}
+        {showCoordinates && showFileLabel && (
+          <Text
+            style={[
+              styles.coordinateLabel,
+              isLight ? styles.coordinateDark : styles.coordinateLight,
+              styles.fileCoordinate,
+            ]}
+          >
+            {FILES[file]}
+          </Text>
+        )}
+        {/* Rank label */}
+        {showCoordinates && showRankLabel && (
+          <Text
+            style={[
+              styles.coordinateLabel,
+              isLight ? styles.coordinateDark : styles.coordinateLight,
+              styles.rankCoordinate,
+            ]}
+          >
+            {RANKS[rank]}
+          </Text>
+        )}
       </View>
     );
   };
+
+  const handleOpenMoveHistory = useCallback(() => {
+    const sheetRef = externalBottomSheetRef || bottomSheetRef;
+    sheetRef.current?.snapToIndex(0); // Open to peek view
+  }, [externalBottomSheetRef]);
 
   const displayRanks = orientation === "white" ? RANKS : [...RANKS].reverse();
   const displayFiles = orientation === "white" ? FILES : [...FILES].reverse();
 
   return (
     <View style={styles.container}>
-      <View
-        ref={boardRef}
-        style={styles.board}
-        onLayout={(event) => {
-          boardRef.current?.measureInWindow((x, y) => {
-            boardPosition.current = { x, y };
-          });
-        }}
-      >
-        {displayRanks.map((rankLabel, rankIndex) => (
-          <View key={rankLabel} style={styles.row}>
-            {displayFiles.map((fileLabel, fileIndex) => {
-              const actualRank =
-                orientation === "white" ? rankIndex : 7 - rankIndex;
-              const actualFile =
-                orientation === "white" ? fileIndex : 7 - fileIndex;
-              return renderSquare(actualFile, actualRank);
-            })}
-          </View>
-        ))}
-      </View>
-      <View style={styles.info}>
-        <Text style={styles.turnText}>
-          Turn: {chess.turn() === "w" ? "White" : "Black"}
-        </Text>
-        <View style={styles.badgeContainer}>
-          <CheckBadge visible={chess.isCheck() && !chess.isCheckmate()} />
+        <View
+          ref={boardRef}
+          style={styles.board}
+          onLayout={(event) => {
+            boardRef.current?.measureInWindow((x, y) => {
+              boardPosition.current = { x, y };
+            });
+          }}
+        >
+          {displayRanks.map((rankLabel, rankIndex) => (
+            <View key={rankLabel} style={styles.row}>
+              {displayFiles.map((fileLabel, fileIndex) => {
+                const actualRank =
+                  orientation === "white" ? rankIndex : 7 - rankIndex;
+                const actualFile =
+                  orientation === "white" ? fileIndex : 7 - fileIndex;
+                return renderSquare(actualFile, actualRank);
+              })}
+            </View>
+          ))}
         </View>
-      </View>
-      <PromotionDialog
-        visible={showPromotionDialog}
-        color={pendingMove ? chess.get(pendingMove.from)?.color || "w" : "w"}
-        onSelect={handlePromotionSelect}
-      />
-      <GameOverDialog
-        visible={showGameOverDialog}
-        winner={
-          chess.isCheckmate()
-            ? chess.turn() === "w"
-              ? "black"
-              : "white"
-            : null
-        }
-        isDraw={chess.isDraw()}
-        onPlayAgain={resetGame}
-      />
+        <View style={styles.info}>
+          <View style={styles.infoRow}>
+            <Text style={styles.turnText}>
+              Turn: {chess.turn() === "w" ? "White" : "Black"}
+            </Text>
+            <Pressable
+              style={styles.historyButton}
+              onPress={handleOpenMoveHistory}
+            >
+              <Text style={styles.historyButtonText}>
+                Move History ({moveHistory.length})
+              </Text>
+            </Pressable>
+          </View>
+          <View style={styles.badgeContainer}>
+            <CheckBadge visible={chess.isCheck() && !chess.isCheckmate()} />
+          </View>
+        </View>
+        <PromotionDialog
+          visible={showPromotionDialog}
+          color={pendingMove ? chess.get(pendingMove.from)?.color || "w" : "w"}
+          onSelect={handlePromotionSelect}
+        />
+        <GameOverDialog
+          visible={showGameOverDialog}
+          winner={
+            chess.isCheckmate()
+              ? chess.turn() === "w"
+                ? "black"
+                : "white"
+              : null
+          }
+          isDraw={chess.isDraw()}
+          onPlayAgain={resetGame}
+        />
     </View>
   );
 };
@@ -547,6 +611,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     position: "relative",
+  },
+  coordinateLabel: {
+    position: "absolute",
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  coordinateLight: {
+    color: "#E8E7D3",
+  },
+  coordinateDark: {
+    color: "#557396",
+  },
+  fileCoordinate: {
+    bottom: 2,
+    right: 2,
+  },
+  rankCoordinate: {
+    top: 2,
+    left: 2,
   },
   lightSquare: {
     backgroundColor: "#E8E7D3",
@@ -609,6 +692,23 @@ const styles = StyleSheet.create({
   info: {
     marginTop: 20,
     alignItems: "center",
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+  },
+  historyButton: {
+    backgroundColor: "#557396",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  historyButtonText: {
+    color: "#E8E7D3",
+    fontSize: 14,
+    fontWeight: "600",
   },
   badgeContainer: {
     height: 48,
