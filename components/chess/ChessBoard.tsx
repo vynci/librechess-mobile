@@ -64,6 +64,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const [attackingSquares, setAttackingSquares] = useState<Square[]>([]);
   const [checkPathSquares, setCheckPathSquares] = useState<Square[]>([]);
   const [moveHistory, setMoveHistory] = useState<string[]>([]);
+  const [lastMoveFrom, setLastMoveFrom] = useState<Square | null>(null);
+  const [lastMoveTo, setLastMoveTo] = useState<Square | null>(null);
   const boardRef = useRef<View>(null);
   const boardPosition = useRef({ x: 0, y: 0 });
   const draggedPieceSquare = useRef<Square | null>(null);
@@ -80,6 +82,17 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     // Notify parent component of move history changes
     if (onMoveHistoryChange) {
       onMoveHistoryChange(history);
+    }
+
+    // Track last move for highlighting
+    const verboseHistory = chess.history({ verbose: true });
+    if (verboseHistory.length > 0) {
+      const lastMove = verboseHistory[verboseHistory.length - 1];
+      setLastMoveFrom(lastMove.from);
+      setLastMoveTo(lastMove.to);
+    } else {
+      setLastMoveFrom(null);
+      setLastMoveTo(null);
     }
 
     // Find the king square and attacking pieces if in check
@@ -182,6 +195,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     setPendingMove(null);
     setShowGameOverDialog(false);
     setMoveHistory([]);
+    setLastMoveFrom(null);
+    setLastMoveTo(null);
     draggedPieceSquare.current = null;
     activePieceRef.current = null;
   }, [chess]);
@@ -437,6 +452,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     const isKingInCheck = kingInCheckSquare === square;
     const isAttackingSquare = attackingSquares.includes(square);
     const isCheckPath = checkPathSquares.includes(square);
+    const isLastMoveFrom = lastMoveFrom === square;
+    const isLastMoveTo = lastMoveTo === square;
+    const isLastMoveSquare = isLastMoveFrom || isLastMoveTo;
 
     // Calculate absolute position of square center
     const squareCenterX =
@@ -458,6 +476,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           styles.square,
           { width: SQUARE_SIZE, height: SQUARE_SIZE },
           isLight ? styles.lightSquare : styles.darkSquare,
+          isLastMoveSquare && styles.lastMoveSquare,
           isCheckPath && styles.checkPathSquare,
           isSelected && styles.selectedSquare,
           isHovered && styles.selectedSquare,
@@ -665,6 +684,9 @@ const styles = StyleSheet.create({
   checkPathSquare: {
     borderWidth: 3,
     borderColor: "#e77e04",
+  },
+  lastMoveSquare: {
+    backgroundColor: "#cdd26a",
   },
   dropTarget: {
     backgroundColor: "rgba(130, 151, 105, 0.8)",
