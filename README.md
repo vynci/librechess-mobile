@@ -6,7 +6,7 @@ A free and open-source chess game for mobile devices built with React Native and
 
 ## Download the App
 
-Download the latest version: [LibreChess Mobile v1.0.0](https://expo.dev/accounts/vynci/projects/librechess-mobile/builds/2f56ea4d-24a0-4732-8c2f-941730b8f26f)
+Download the latest version: [LibreChess Mobile v1.0.0](https://expo.dev/accounts/vynci/projects/librechess-mobile/builds/aeb3a1d2-b719-4772-ab55-8c1c727313bd)
 
 <div align="center">
   <img src="assets/download-apk.png" alt="Download QR Code" width="200"/>
@@ -20,7 +20,6 @@ Download the latest version: [LibreChess Mobile v1.0.0](https://expo.dev/account
 - Clean, modern UI with smooth animations
 - Support for both iOS and Android devices
 - Haptic feedback for enhanced user experience
-- Dark and light mode support
 
 ### Coming Soon
 
@@ -32,11 +31,9 @@ Download the latest version: [LibreChess Mobile v1.0.0](https://expo.dev/account
 
 ### Prerequisites
 
-- Node.js (v16 or higher)
+- Node.js (v18 or higher)
 - npm or yarn
 - Expo CLI
-- For iOS development: macOS with Xcode
-- For Android development: Android Studio
 
 ### Installation
 
@@ -65,19 +62,6 @@ After starting the development server, you can run the app on:
 - **iOS Simulator**: Press `i` in the terminal or scan the QR code with the Expo Go app
 - **Android Emulator**: Press `a` in the terminal or scan the QR code with the Expo Go app
 - **Physical Device**: Install [Expo Go](https://expo.dev/go) and scan the QR code
-
-Alternatively, use these commands:
-
-```bash
-# Run on iOS
-npm run ios
-
-# Run on Android
-npm run android
-
-# Run on web
-npm run web
-```
 
 ## Tech Stack
 
